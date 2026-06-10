@@ -1,0 +1,568 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>School Alert System</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    /* Small touches Tailwind's CDN build doesn't cover */
+    @keyframes pulse-border {
+      0%, 100% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.35); }
+      50%      { box-shadow: 0 0 0 6px rgba(239, 68, 68, 0); }
+    }
+    .pending-pulse { animation: pulse-border 2s ease-in-out infinite; }
+    @keyframes toast-in {
+      from { opacity: 0; transform: translateY(12px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
+    .toast-in { animation: toast-in .25s ease-out; }
+    @keyframes fade-in { from { opacity: 0; } to { opacity: 1; } }
+    .fade-in { animation: fade-in .3s ease-out; }
+    body { -webkit-tap-highlight-color: transparent; }
+  </style>
+</head>
+<body class="bg-sky-50 text-slate-800 min-h-screen font-sans antialiased">
+
+  <!-- ───────────────────────────── TOP NAV ───────────────────────────── -->
+  <nav class="bg-white/90 backdrop-blur border-b border-slate-200 sticky top-0 z-40 shadow-sm">
+    <div class="max-w-6xl mx-auto px-4 h-16 flex items-center justify-between gap-3">
+      <div class="flex items-center gap-2 min-w-0">
+        <div class="w-9 h-9 rounded-xl bg-blue-600 flex items-center justify-center text-white text-lg shadow-sm shrink-0">🛎️</div>
+        <div class="min-w-0">
+          <h1 class="font-bold text-slate-800 leading-tight truncate">School Alert System</h1>
+          <p id="navUser" class="text-xs text-slate-400 truncate hidden sm:block"></p>
+        </div>
+      </div>
+      <div class="flex items-center gap-1 bg-slate-100 rounded-xl p-1" role="tablist">
+        <button id="tabForm" onclick="showView('form')"
+                class="px-4 py-2 rounded-lg text-sm font-semibold transition-colors">Alert Form</button>
+        <button id="tabDashboard" onclick="showView('dashboard')"
+                class="px-4 py-2 rounded-lg text-sm font-semibold transition-colors">Live Dashboard</button>
+      </div>
+    </div>
+  </nav>
+
+  <!-- ─────────────────────── VIEW 1 · TEACHER FORM ───────────────────── -->
+  <main id="viewForm" class="max-w-lg mx-auto px-4 py-8">
+    <div class="bg-white rounded-2xl shadow-lg shadow-slate-200/60 p-6 sm:p-8">
+      <h2 class="text-2xl font-bold mb-1">Request Assistance</h2>
+      <p class="text-slate-500 text-sm mb-6">Help is on the way the moment you press send.</p>
+
+      <form id="alertForm" autocomplete="off">
+        <!-- Student -->
+        <label for="studentInput" class="block text-sm font-semibold mb-1.5">Student</label>
+        <input id="studentInput" list="studentList" type="text" required
+               placeholder="Start typing a name…"
+               class="w-full rounded-xl border border-slate-300 px-4 py-3.5 text-base focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 mb-5 bg-white">
+        <datalist id="studentList"></datalist>
+
+        <!-- Location -->
+        <label for="locationInput" class="block text-sm font-semibold mb-1.5">Your location</label>
+        <input id="locationInput" type="text" required
+               placeholder="e.g. Room 12, Science Block"
+               class="w-full rounded-xl border border-slate-300 px-4 py-3.5 text-base focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 mb-5 bg-white">
+
+        <!-- Category chips -->
+        <span class="block text-sm font-semibold mb-2">What kind of help?</span>
+        <div id="categoryChips" class="grid grid-cols-2 gap-2.5 mb-7"></div>
+
+        <!-- Submit -->
+        <button id="btnSubmit" type="submit"
+                class="w-full bg-blue-600 hover:bg-blue-700 active:bg-blue-800 disabled:opacity-50 disabled:cursor-not-allowed text-white text-lg font-bold py-4 rounded-2xl shadow-lg shadow-blue-600/30 transition-all">
+          Send Alert
+        </button>
+      </form>
+    </div>
+  </main>
+
+  <!-- ────────────────────── VIEW 2 · LIVE DASHBOARD ──────────────────── -->
+  <main id="viewDashboard" class="max-w-6xl mx-auto px-4 py-8 hidden">
+    <div class="flex flex-wrap items-center justify-between gap-3 mb-6">
+      <div>
+        <h2 class="text-2xl font-bold">Live Dashboard</h2>
+        <p id="lastUpdated" class="text-sm text-slate-400">Connecting…</p>
+      </div>
+      <button id="btnSound" onclick="toggleSound()"
+              class="px-4 py-2 rounded-xl border border-slate-300 bg-white text-sm font-semibold text-slate-600 hover:bg-slate-50 shadow-sm transition-colors">
+        Enable sound 🔔
+      </button>
+    </div>
+
+    <section>
+      <div id="activeEmpty" class="hidden bg-white rounded-2xl border border-dashed border-slate-300 p-12 text-center text-slate-400">
+        <div class="text-4xl mb-2">✅</div>
+        <p class="font-semibold text-slate-500">All clear — no active alerts.</p>
+      </div>
+      <div id="activeGrid" class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4"></div>
+    </section>
+
+    <section class="mt-10">
+      <h3 class="text-sm font-bold uppercase tracking-wider text-slate-400 mb-3">Resolved today</h3>
+      <p id="resolvedEmpty" class="hidden text-sm text-slate-400">Nothing resolved yet today.</p>
+      <div id="resolvedGrid" class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4"></div>
+    </section>
+  </main>
+
+  <!-- ─────────────────── SUCCESS OVERLAY (full-screen) ───────────────── -->
+  <div id="successOverlay" class="hidden fixed inset-0 z-50 bg-blue-600 flex flex-col items-center justify-center text-white fade-in">
+    <div class="w-20 h-20 rounded-full bg-white/20 flex items-center justify-center text-4xl mb-5">✓</div>
+    <p class="text-3xl font-bold mb-1.5">Request Submitted.</p>
+    <p class="text-blue-100">Responders can see your alert now.</p>
+  </div>
+
+  <!-- ──────────────────────────── TOASTS ─────────────────────────────── -->
+  <div id="toastBox" class="fixed bottom-5 left-1/2 -translate-x-1/2 z-50 flex flex-col gap-2 items-center w-[calc(100%-2rem)] max-w-md"></div>
+
+<script>
+/* ════════════════════════════ CONFIG / STATE ═══════════════════════════ */
+
+var CATEGORIES = [
+  { name: 'Urgent',                          icon: '🚨', accent: 'urgent'  },
+  { name: 'Medical',                         icon: '⚕️', accent: 'medical' },
+  { name: 'Non-Urgent (e.g. Toilet Break)',  icon: '🚻', accent: 'normal'  },
+  { name: 'Truancy',                         icon: '🚶', accent: 'normal'  },
+  { name: 'Mobile Phone',                    icon: '📱', accent: 'normal'  }
+];
+var PRIORITY_CATEGORIES = ['Urgent', 'Medical'];
+var POLL_MS = 5000;
+
+var state = {
+  view: 'form',
+  alerts: [],            // last server truth
+  overrides: {},         // id → optimistic alert object (in-flight writes)
+  seenIds: null,         // Set of alert IDs already seen (null until first poll)
+  soundEnabled: false,
+  pollTimer: null,
+  polling: false,
+  userEmail: ''
+};
+var audioCtx = null;
+
+/* ═══════════════════════ google.script.run PROMISE ═════════════════════ */
+
+/**
+ * Calls a server function and unwraps the structured {success,message,data}
+ * envelope — resolves with `data`, rejects with Error(message).
+ */
+function server(fn) {
+  var args = Array.prototype.slice.call(arguments, 1);
+  return new Promise(function (resolve, reject) {
+    var runner = google.script.run
+      .withSuccessHandler(function (res) {
+        if (res && res.success) resolve(res.data);
+        else reject(new Error((res && res.message) || 'Server error.'));
+      })
+      .withFailureHandler(function (err) {
+        reject(new Error((err && err.message) || 'Network error.'));
+      });
+    runner[fn].apply(runner, args);
+  });
+}
+
+/* ═══════════════════════════════ HELPERS ═══════════════════════════════ */
+
+function $(id) { return document.getElementById(id); }
+
+function escapeHtml(str) {
+  return String(str == null ? '' : str).replace(/[&<>"']/g, function (c) {
+    return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
+  });
+}
+
+function timeShort(iso) {
+  if (!iso) return '';
+  var d = new Date(iso);
+  return d.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
+}
+
+function timeAgo(iso) {
+  if (!iso) return '';
+  var secs = Math.max(0, Math.floor((Date.now() - new Date(iso).getTime()) / 1000));
+  if (secs < 60) return 'just now';
+  var mins = Math.floor(secs / 60);
+  if (mins < 60) return mins + 'm ago';
+  var hrs = Math.floor(mins / 60);
+  return hrs + 'h ' + (mins % 60) + 'm ago';
+}
+
+function shortName(email) {
+  return email ? email.split('@')[0] : '';
+}
+
+function toast(message, type) {
+  var el = document.createElement('div');
+  el.className = 'toast-in rounded-xl px-5 py-3.5 shadow-lg text-sm font-semibold text-white w-full text-center ' +
+    (type === 'error' ? 'bg-red-600' : 'bg-slate-800');
+  el.textContent = message;
+  $('toastBox').appendChild(el);
+  setTimeout(function () { el.remove(); }, 4500);
+}
+
+/* ════════════════════════════ VIEW SWITCHING ═══════════════════════════ */
+
+function showView(view) {
+  state.view = view;
+  $('viewForm').classList.toggle('hidden', view !== 'form');
+  $('viewDashboard').classList.toggle('hidden', view !== 'dashboard');
+
+  var active = 'bg-white text-blue-600 shadow-sm';
+  var idle = 'text-slate-500 hover:text-slate-700';
+  $('tabForm').className = 'px-4 py-2 rounded-lg text-sm font-semibold transition-colors ' + (view === 'form' ? active : idle);
+  $('tabDashboard').className = 'px-4 py-2 rounded-lg text-sm font-semibold transition-colors ' + (view === 'dashboard' ? active : idle);
+
+  if (view === 'dashboard') {
+    pollNow();        // fetch immediately on entering the dashboard
+    startPolling();
+  } else {
+    stopPolling();
+  }
+}
+
+/* ═══════════════════════ FORM · CATEGORY CHIPS ═════════════════════════ */
+
+var selectedCategory = null;
+
+var CHIP_STYLES = {
+  urgent:  { idle: 'border-red-300 bg-red-50 text-red-700',     active: 'border-red-600 bg-red-600 text-white shadow-lg shadow-red-600/30' },
+  medical: { idle: 'border-amber-300 bg-amber-50 text-amber-700', active: 'border-amber-500 bg-amber-500 text-white shadow-lg shadow-amber-500/30' },
+  normal:  { idle: 'border-slate-200 bg-white text-slate-600',  active: 'border-blue-600 bg-blue-600 text-white shadow-lg shadow-blue-600/30' }
+};
+
+function renderChips() {
+  var box = $('categoryChips');
+  box.innerHTML = '';
+  CATEGORIES.forEach(function (cat, i) {
+    var btn = document.createElement('button');
+    btn.type = 'button';
+    var selected = selectedCategory === cat.name;
+    var style = CHIP_STYLES[cat.accent];
+    // Urgent + Medical get prominent full-width placement on top.
+    btn.className = (i < 2 ? '' : i === 2 ? 'col-span-2 ' : '') +
+      'rounded-xl border-2 px-3 py-4 text-sm font-bold transition-all text-center leading-snug ' +
+      (selected ? style.active : style.idle);
+    btn.innerHTML = '<span class="text-xl block mb-1">' + cat.icon + '</span>' + escapeHtml(cat.name);
+    btn.onclick = function () {
+      selectedCategory = cat.name;
+      renderChips();
+    };
+    box.appendChild(btn);
+  });
+}
+
+/* ══════════════════════════ FORM · SUBMISSION ══════════════════════════ */
+
+$('alertForm').addEventListener('submit', function (e) {
+  e.preventDefault();
+
+  var studentName = $('studentInput').value.trim();
+  var location = $('locationInput').value.trim();
+  if (!studentName) { toast('Please enter a student name.', 'error'); return; }
+  if (!location)    { toast('Please enter your location.', 'error'); return; }
+  if (!selectedCategory) { toast('Please choose a category.', 'error'); return; }
+
+  var btn = $('btnSubmit');
+  btn.disabled = true;
+  btn.textContent = 'Sending…';
+
+  server('createAlert', { studentName: studentName, location: location, category: selectedCategory })
+    .then(function () {
+      // Calming full-screen confirmation, then reset (keep location — it is
+      // almost always the same room for the next alert).
+      var overlay = $('successOverlay');
+      overlay.classList.remove('hidden');
+      setTimeout(function () {
+        overlay.classList.add('hidden');
+        $('studentInput').value = '';
+        selectedCategory = null;
+        renderChips();
+        btn.disabled = false;
+        btn.textContent = 'Send Alert';
+      }, 2000);
+    })
+    .catch(function (err) {
+      // Failure: keep every field intact so nothing is lost under stress.
+      toast('Alert NOT sent: ' + err.message, 'error');
+      btn.disabled = false;
+      btn.textContent = 'Send Alert';
+    });
+});
+
+/* ═══════════════════════ DASHBOARD · POLLING ═══════════════════════════ */
+
+function startPolling() {
+  if (state.pollTimer) return;
+  state.pollTimer = setInterval(pollNow, POLL_MS);
+}
+
+function stopPolling() {
+  if (state.pollTimer) {
+    clearInterval(state.pollTimer);
+    state.pollTimer = null;
+  }
+}
+
+// Save quota: pause while the tab is hidden, resume (and refresh) when shown.
+document.addEventListener('visibilitychange', function () {
+  if (document.hidden) {
+    stopPolling();
+  } else if (state.view === 'dashboard') {
+    pollNow();
+    startPolling();
+  }
+});
+
+function pollNow() {
+  if (state.polling || document.hidden) return;
+  state.polling = true;
+  server('getActiveAlerts')
+    .then(function (alerts) {
+      state.alerts = alerts || [];
+      reconcileAndRender();
+      maybeBeep();
+      $('lastUpdated').textContent = 'Updated ' + new Date().toLocaleTimeString('en-GB');
+    })
+    .catch(function (err) {
+      $('lastUpdated').textContent = 'Connection problem — retrying… (' + err.message + ')';
+    })
+    .finally(function () { state.polling = false; });
+}
+
+/* ═══════════════ DASHBOARD · OPTIMISTIC STATE + RENDER ═════════════════ */
+
+/**
+ * Merges the last server truth with any optimistic overrides still in flight.
+ * Once a write completes, its override is dropped and the poll data wins, so
+ * the UI can never drift from the sheet for more than one poll cycle.
+ */
+function effectiveAlerts() {
+  return state.alerts.map(function (a) {
+    return state.overrides[a.id] || a;
+  });
+}
+
+function reconcileAndRender() {
+  if (state.view === 'dashboard') render();
+}
+
+function sortActive(a, b) {
+  // Pending above On Way; Urgent/Medical to the top within Pending;
+  // otherwise oldest first.
+  var statusRank = { 'Pending': 0, 'On Way': 1 };
+  if (statusRank[a.status] !== statusRank[b.status]) {
+    return statusRank[a.status] - statusRank[b.status];
+  }
+  if (a.status === 'Pending') {
+    var ap = PRIORITY_CATEGORIES.indexOf(a.category) !== -1 ? 0 : 1;
+    var bp = PRIORITY_CATEGORIES.indexOf(b.category) !== -1 ? 0 : 1;
+    if (ap !== bp) return ap - bp;
+  }
+  return new Date(a.timestamp) - new Date(b.timestamp);
+}
+
+function render() {
+  var all = effectiveAlerts();
+  var active = all.filter(function (a) { return a.status === 'Pending' || a.status === 'On Way'; }).sort(sortActive);
+  var resolved = all.filter(function (a) { return a.status === 'Resolved'; })
+    .sort(function (a, b) { return new Date(b.timeResolved) - new Date(a.timeResolved); });
+
+  $('activeGrid').innerHTML = active.map(cardHtml).join('');
+  $('resolvedGrid').innerHTML = resolved.map(cardHtml).join('');
+  $('activeEmpty').classList.toggle('hidden', active.length > 0);
+  $('resolvedEmpty').classList.toggle('hidden', resolved.length > 0);
+}
+
+function categoryBadge(category) {
+  var cls = category === 'Urgent' ? 'bg-red-100 text-red-700'
+          : category === 'Medical' ? 'bg-amber-100 text-amber-700'
+          : 'bg-slate-100 text-slate-600';
+  return '<span class="text-xs font-bold px-2.5 py-1 rounded-full ' + cls + '">' + escapeHtml(category) + '</span>';
+}
+
+function cardHtml(a) {
+  var border, badge, actions = '', meta = '';
+
+  if (a.status === 'Pending') {
+    border = 'border-l-4 border-red-500 pending-pulse';
+    badge = '<span class="text-xs font-bold px-2.5 py-1 rounded-full bg-red-600 text-white">PENDING</span>';
+    actions =
+      '<button onclick="changeStatus(\'' + a.id + '\',\'On Way\')" ' +
+      'class="flex-1 bg-blue-600 hover:bg-blue-700 text-white font-bold py-2.5 px-4 rounded-xl text-sm shadow-sm transition-colors">' +
+      'Acknowledge (On Way)</button>';
+  } else if (a.status === 'On Way') {
+    border = 'border-l-4 border-amber-500';
+    badge = '<span class="text-xs font-bold px-2.5 py-1 rounded-full bg-amber-500 text-white">ON WAY</span>';
+    meta = '<p class="text-xs text-amber-700 font-semibold mt-2">🏃 ' + escapeHtml(shortName(a.responder)) +
+           ' responding' + (a.timeResponded ? ' · since ' + timeShort(a.timeResponded) : '') + '</p>';
+    actions =
+      '<button onclick="changeStatus(\'' + a.id + '\',\'Resolved\')" ' +
+      'class="flex-1 bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-2.5 px-4 rounded-xl text-sm shadow-sm transition-colors">' +
+      'Mark Resolved</button>' +
+      '<button onclick="changeStatus(\'' + a.id + '\',\'Pending\')" title="Undo acknowledge" ' +
+      'class="px-3 py-2.5 rounded-xl border border-slate-300 text-slate-500 hover:bg-slate-50 text-sm font-semibold transition-colors">' +
+      'Undo</button>';
+  } else { // Resolved
+    border = 'border-l-4 border-emerald-400 opacity-80';
+    badge = '<span class="text-xs font-bold px-2.5 py-1 rounded-full bg-emerald-100 text-emerald-700">RESOLVED</span>';
+    meta = '<p class="text-xs text-slate-400 mt-2">Resolved at ' + timeShort(a.timeResolved) +
+           (a.responder ? ' by ' + escapeHtml(shortName(a.responder)) : '') + '</p>';
+    actions =
+      '<button onclick="changeStatus(\'' + a.id + '\',\'On Way\')" title="Undo resolve — reopen this alert" ' +
+      'class="px-3 py-2 rounded-xl border border-slate-300 text-slate-500 hover:bg-slate-50 text-xs font-semibold transition-colors">' +
+      'Undo</button>';
+  }
+
+  return (
+    '<div class="bg-white rounded-2xl shadow-md shadow-slate-200/60 p-5 ' + border + ' fade-in">' +
+      '<div class="flex items-start justify-between gap-2 mb-3">' + categoryBadge(a.category) + badge + '</div>' +
+      '<p class="text-lg font-bold leading-snug">' + escapeHtml(a.studentName) + '</p>' +
+      '<p class="text-sm text-slate-600 mt-0.5">📍 ' + escapeHtml(a.location) + '</p>' +
+      '<p class="text-xs text-slate-400 mt-2">Raised by ' + escapeHtml(shortName(a.raisedBy)) +
+        ' · ' + timeShort(a.timestamp) + ' (' + timeAgo(a.timestamp) + ')</p>' +
+      meta +
+      '<div class="flex gap-2 mt-4">' + actions + '</div>' +
+    '</div>'
+  );
+}
+
+/* ═══════════════ DASHBOARD · OPTIMISTIC STATUS CHANGES ═════════════════ */
+
+function changeStatus(id, newStatus) {
+  var current = effectiveAlerts().find(function (a) { return a.id === id; });
+  if (!current) return;
+
+  // 1. Optimistic update — paint the expected end state immediately.
+  var optimistic = Object.assign({}, current, { status: newStatus });
+  if (newStatus === 'On Way' && current.status === 'Pending') {
+    optimistic.responder = state.userEmail;
+    optimistic.timeResponded = new Date().toISOString();
+  } else if (newStatus === 'Resolved') {
+    optimistic.timeResolved = new Date().toISOString();
+  } else if (newStatus === 'Pending') {
+    optimistic.responder = '';
+    optimistic.timeResponded = '';
+  } else if (newStatus === 'On Way' && current.status === 'Resolved') {
+    optimistic.timeResolved = '';
+  }
+  state.overrides[id] = optimistic;
+  render();
+
+  // 2. Real write — on success adopt the server's row; on failure revert.
+  server('updateAlertStatus', id, newStatus)
+    .then(function (updated) {
+      delete state.overrides[id];
+      state.alerts = state.alerts.map(function (a) { return a.id === id ? updated : a; });
+      render();
+    })
+    .catch(function (err) {
+      delete state.overrides[id];
+      render();
+      toast('Update failed — reverted. ' + err.message, 'error');
+      pollNow(); // re-sync with the sheet immediately
+    });
+}
+
+/* ═══════════════════════ DASHBOARD · SOUND CUE ═════════════════════════ */
+
+function toggleSound() {
+  state.soundEnabled = !state.soundEnabled;
+  if (state.soundEnabled) {
+    // The user gesture unlocks audio: create/resume the context and play a
+    // near-silent blip so later beeps are allowed by autoplay policy.
+    try {
+      audioCtx = audioCtx || new (window.AudioContext || window.webkitAudioContext)();
+      audioCtx.resume();
+      beep(0.001);
+    } catch (e) { /* no audio support — toggle still shows intent */ }
+  }
+  try { sessionStorage.setItem('soundEnabled', state.soundEnabled ? '1' : '0'); } catch (e) {}
+  renderSoundButton();
+}
+
+function renderSoundButton() {
+  var btn = $('btnSound');
+  if (state.soundEnabled) {
+    btn.textContent = 'Sound on 🔔';
+    btn.className = 'px-4 py-2 rounded-xl border border-blue-600 bg-blue-600 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-blue-700';
+  } else {
+    btn.textContent = 'Enable sound 🔔';
+    btn.className = 'px-4 py-2 rounded-xl border border-slate-300 bg-white text-sm font-semibold text-slate-600 hover:bg-slate-50 shadow-sm transition-colors';
+  }
+}
+
+function beep(volume) {
+  if (!audioCtx) return;
+  var osc = audioCtx.createOscillator();
+  var gain = audioCtx.createGain();
+  osc.type = 'sine';
+  osc.frequency.value = 880;
+  gain.gain.value = volume;
+  gain.gain.exponentialRampToValueAtTime(0.0001, audioCtx.currentTime + 0.4);
+  osc.connect(gain).connect(audioCtx.destination);
+  osc.start();
+  osc.stop(audioCtx.currentTime + 0.4);
+}
+
+/**
+ * Beeps once when a *new* Pending alert appears. The first poll only seeds
+ * the seen-ID set, so reloading the page never triggers a false alarm.
+ */
+function maybeBeep() {
+  if (state.seenIds === null) {
+    state.seenIds = new Set(state.alerts.map(function (a) { return a.id; }));
+    return;
+  }
+  var hasNewPending = false;
+  state.alerts.forEach(function (a) {
+    if (!state.seenIds.has(a.id)) {
+      state.seenIds.add(a.id);
+      if (a.status === 'Pending') hasNewPending = true;
+    }
+  });
+  if (hasNewPending && state.soundEnabled) {
+    beep(0.25);
+    setTimeout(function () { beep(0.25); }, 500);
+  }
+}
+
+/* ═══════════════════════════════ INIT ══════════════════════════════════ */
+
+(function init() {
+  renderChips();
+  showView('form');
+
+  // Restore the sound preference for this session (best-effort — storage may
+  // be partitioned inside the sandboxed iframe).
+  try {
+    if (sessionStorage.getItem('soundEnabled') === '1') state.soundEnabled = true;
+  } catch (e) {}
+  renderSoundButton();
+
+  // Who am I + last-used location (UserProperties, server-side).
+  server('getUserContext')
+    .then(function (ctx) {
+      state.userEmail = ctx.email || '';
+      $('navUser').textContent = state.userEmail;
+      if (ctx.lastLocation && !$('locationInput').value) {
+        $('locationInput').value = ctx.lastLocation;
+      }
+    })
+    .catch(function () { /* non-fatal */ });
+
+  // Predictive student datalist.
+  server('getStudents')
+    .then(function (students) {
+      var dl = $('studentList');
+      dl.innerHTML = '';
+      (students || []).forEach(function (s) {
+        var opt = document.createElement('option');
+        opt.value = s.name;
+        opt.label = s.year ? 'Year ' + s.year : '';
+        dl.appendChild(opt);
+      });
+    })
+    .catch(function (err) { toast('Could not load student list: ' + err.message, 'error'); });
+})();
+</script>
+</body>
+</html>
