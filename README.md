@@ -43,3 +43,15 @@ dashboard.
 
 > After editing the code later, use **Deploy → Manage deployments → Edit →
 > New version** so the existing URL picks up the changes.
+
+## Rebuilding the inlined CSS
+
+`Index.html` ships with a precompiled, minified Tailwind stylesheet inlined in
+its `<style>` block (~15 KB) instead of loading the Tailwind Play CDN (~350 KB
+runtime compiler) — this roughly halves page load time. If you add new
+Tailwind classes to the markup or JS, regenerate the stylesheet and replace
+the first `<style>` block's contents:
+
+```bash
+npx tailwindcss@3.4.17 -i tailwind.input.css -o tailwind.out.css --minify
+```

@@ -191,14 +191,19 @@ function cachedSheetRead_(cacheKey, sheetName, mapRow) {
 }
 
 /**
- * Per-user context for the form: who they are and their last-used location
- * (UserProperties — localStorage is unreliable inside the sandboxed iframe).
+ * Single startup payload for the SPA: identity, last-used location and the
+ * student datalist in one round trip. Every google.script.run call carries
+ * ~0.5–1s of Apps Script overhead regardless of payload size, so the form
+ * boots with exactly one call instead of two.
  */
-function getUserContext() {
+function getInitData() {
   return safeCall_(function () {
     return {
       email: Session.getActiveUser().getEmail(),
-      lastLocation: PropertiesService.getUserProperties().getProperty('lastLocation') || ''
+      lastLocation: PropertiesService.getUserProperties().getProperty('lastLocation') || '',
+      students: cachedSheetRead_('students_v1', SHEET_STUDENT, function (row) {
+        return { name: String(row[0]), id: String(row[1]), year: String(row[2]) };
+      })
     };
   });
 }
